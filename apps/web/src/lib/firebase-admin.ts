@@ -11,11 +11,20 @@ function loadCredentials() {
       "FIREBASE_ADMIN_CREDENTIALS is not set. Paste the Firebase service-account JSON as a single-line string.",
     );
   }
-  try {
-    return JSON.parse(raw);
-  } catch (err) {
-    throw new Error(`FIREBASE_ADMIN_CREDENTIALS is not valid JSON: ${(err as Error).message}`);
+  // Accept any of: raw single-line JSON, base64-encoded JSON, or JSON whose
+  // internal newlines (in private_key) were pasted literally.
+  const attempts = [
+    raw,
+    (() => { try { return Buffer.from(raw, "base64").toString("utf8"); } catch { return null; } })(),
+    raw.replace(/\r?\n/g, "\\n"),
+  ];
+  for (const candidate of attempts) {
+    if (!candidate) continue;
+    try { return JSON.parse(candidate); } catch {}
   }
+  throw new Error(
+    "FIREBASE_ADMIN_CREDENTIALS could not be parsed as JSON or base64-encoded JSON.",
+  );
 }
 
 export function getAdminApp(): App {
