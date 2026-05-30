@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm --filter @crealify/web build",
+  "outputDirectory": "apps/web/.next",
+  "functions": {
+    "apps/web/src/app/api/inngest/route.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    }
+  }
+}
