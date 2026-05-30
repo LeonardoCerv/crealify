@@ -107,46 +107,65 @@ export const renderBlockFunction = inngest.createFunction(
       if (personaActive) {
         if (!tokens.elevenlabs) throw new Error("ElevenLabs token required for persona swap");
 
-        // 1) Extract the original audio track from the imported clip.
-        const sourceAudio = await step.run("persona-extract-audio", async () =>
-          extractAudioFromUrl(context.block.uploadedAssetUrl!),
-        );
+        // ⚠ Inngest serialises each step's return value to JSON, so any
+        // Buffer crossing a step boundary becomes a `{type:"Buffer",data}`
+        // object and breaks the next call. We pass URLs between steps and
+        // re-read bytes inside each step instead.
 
-        // 2) ElevenLabs Speech-to-Speech: keep delivery, change voice.
-        const newAudio = await step.run("persona-speech-to-speech", async () => {
+        // 1) Extract the original audio track → stage in R2.
+        const sourceAudioUrl = await step.run("persona-extract-audio", async () => {
+          const a = await extractAudioFromUrl(context.block.uploadedAssetUrl!);
+          const up = await uploadObject({
+            key: `audio-source/${cacheKey}.mp3`,
+            body: a.buffer,
+            contentType: a.contentType,
+          });
+          return up.url;
+        });
+
+        // 2) ElevenLabs Speech-to-Speech → stage swapped audio in R2.
+        const newAudioUrl = await step.run("persona-speech-to-speech", async () => {
+          const res = await fetch(sourceAudioUrl);
+          if (!res.ok) throw new Error(`fetch source audio: HTTP ${res.status}`);
+          const sourceBuffer = Buffer.from(await res.arrayBuffer());
           const eleven = new ElevenLabsClient({ apiKey: tokens.elevenlabs!.secret });
           const settings = persona.voiceSettings ?? {};
-          return eleven.speechToSpeech({
+          const out = await eleven.speechToSpeech({
             voiceId: personaVoiceId!,
-            audio: sourceAudio.buffer,
-            contentType: sourceAudio.contentType,
+            audio: sourceBuffer,
+            contentType: "audio/mpeg",
             filename: "source.mp3",
             settings: Object.keys(settings).length ? settings : undefined,
           });
+          const up = await uploadObject({
+            key: `audio-swapped/${cacheKey}.mp3`,
+            body: Buffer.from(out.audio),
+            contentType: out.contentType,
+          });
+          return up.url;
         });
 
-        // 3) Mux the new audio back over the original video.
-        const swapped = await step.run("persona-mux", async () =>
-          muxAudioOverUrl({
+        // 3) Mux + stage final video.
+        const finalUrl = await step.run("persona-mux-stage", async () => {
+          const audioRes = await fetch(newAudioUrl);
+          if (!audioRes.ok) throw new Error(`fetch swapped audio: HTTP ${audioRes.status}`);
+          const audioBuffer = Buffer.from(await audioRes.arrayBuffer());
+          const swapped = await muxAudioOverUrl({
             videoUrl: context.block.uploadedAssetUrl!,
-            audio: newAudio.audio,
-            audioContentType: newAudio.contentType,
-          }),
-        );
-
-        // 4) Upload the result.
-        const final = await step.run("persona-stage-output", async () => {
-          const key = `renders/${cacheKey}.mp4`;
-          return uploadObject({
-            key,
+            audio: audioBuffer,
+            audioContentType: "audio/mpeg",
+          });
+          const up = await uploadObject({
+            key: `renders/${cacheKey}.mp4`,
             body: swapped.buffer,
             contentType: swapped.contentType,
           });
+          return { url: up.url, durationMs: Math.round(swapped.durationSec * 1000) };
         });
 
         await markRenderSucceeded(renderId, {
-          assetUrl: final.url,
-          durationMs: Math.round(swapped.durationSec * 1000),
+          assetUrl: finalUrl.url,
+          durationMs: finalUrl.durationMs,
         });
         return { renderId };
       }
