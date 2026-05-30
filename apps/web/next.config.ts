@@ -6,7 +6,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 const config: NextConfig = {
   reactStrictMode: true,
-  typedRoutes: true,
+  // typedRoutes off: dynamic href strings (e.g. /blocks?slot=opener) in Link
+  // are common in this app and typedRoutes treats those as a build-time error
+  // even though they're valid at runtime.
   // Pin the workspace root to the Crealify repo so Next stops walking up to
   // the user's home directory and picking up a stray package-lock.json.
   outputFileTracingRoot: resolve(here, "../.."),
