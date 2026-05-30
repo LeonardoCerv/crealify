@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --paper: #fafbfc;
+  --paper-50: #ffffff;
+  --ink: #1f2937;
+  --accent: #2f7bff;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-paper text-ink antialiased;
+  background-image:
+    radial-gradient(ellipse at top, rgba(47, 123, 255, 0.045), transparent 60%),
+    radial-gradient(ellipse at bottom right, rgba(47, 123, 255, 0.03), transparent 55%);
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* Selection uses the blue accent for a snappy feel. */
+::selection {
+  background: rgba(47, 123, 255, 0.25);
+}

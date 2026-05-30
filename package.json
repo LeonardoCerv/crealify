@@ -1,0 +1,27 @@
+{
+  "name": "crealify",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Crealify — open-source block-based AI-character video automation. crealify.xyz",
+  "homepage": "https://crealify.xyz",
+  "license": "MIT",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @crealify/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "db:generate": "pnpm --filter @crealify/db generate",
+    "db:migrate": "pnpm --filter @crealify/db migrate",
+    "db:push": "pnpm --filter @crealify/db push",
+    "docker:up": "docker compose -f infra/docker-compose.yml up -d",
+    "docker:down": "docker compose -f infra/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "@types/node": "^22.9.0"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "name": "@crealify/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "start": "next start -p 3002",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.679.0",
+    "@aws-sdk/s3-request-presigner": "^3.679.0",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@crealify/anthropic": "workspace:*",
+    "@crealify/db": "workspace:*",
+    "@crealify/elevenlabs": "workspace:*",
+    "@crealify/ffmpeg": "workspace:*",
+    "@crealify/higgsfield": "workspace:*",
+    "@crealify/meta": "workspace:*",
+    "@crealify/shared": "workspace:*",
+    "@crealify/tiktok": "workspace:*",
+    "drizzle-orm": "^0.36.0",
+    "firebase": "^11.0.1",
+    "firebase-admin": "^13.0.0",
+    "inngest": "^3.27.0",
+    "next": "^15.0.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "server-only": "^0.0.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.3"
+  }
+}

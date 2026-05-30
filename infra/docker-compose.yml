@@ -1,0 +1,66 @@
+name: crealify
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: crealify-postgres
+    environment:
+      POSTGRES_USER: crealify
+      POSTGRES_PASSWORD: crealify
+      POSTGRES_DB: crealify
+    ports:
+      - "5433:5432"
+    volumes:
+      - crealify-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crealify -d crealify"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: crealify-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: crealify
+      MINIO_ROOT_PASSWORD: crealify-secret
+      # Allow browser uploads from the local dev server. Set to your real origin
+      # (or list) in production. CORS is enforced by MinIO itself.
+      MINIO_API_CORS_ALLOW_ORIGIN: "http://localhost:3002"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - crealify-minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio-bucket-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 crealify crealify-secret &&
+      mc mb --ignore-existing local/crealify-assets &&
+      mc anonymous set download local/crealify-assets &&
+      echo 'Bucket crealify-assets ready'
+      "
+
+  inngest:
+    image: inngest/inngest:latest
+    container_name: crealify-inngest
+    command: inngest dev -u http://host.docker.internal:3002/api/inngest
+    ports:
+      - "8288:8288"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  crealify-pg-data:
+  crealify-minio-data:
