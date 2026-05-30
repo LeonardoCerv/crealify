@@ -86,16 +86,16 @@ export const renderBlockFunction = inngest.createFunction(
       const cacheKey = context.render.cacheKey;
       const aspect = context.render.cacheInputs.aspect as "9:16" | "1:1" | "16:9";
 
-      // 3a. Persona override — when a Persona (voice, and optionally an
-      // image) is attached to the video, we swap the *audio* of each
-      // imported clip using ElevenLabs Speech-to-Speech. This preserves
-      // the original delivery's pacing, prosody, and emotion while
-      // changing the voice. The video frames are preserved as-is.
-      //
-      // Visual character swap (replace face/body in-frame) is not in this
-      // path — Seedance and similar models are text/image→video generators,
-      // not video-to-video character swappers. Once we wire a real
-      // character-swap model (e.g. via fal.ai), we'll layer it on here.
+      // 3a. Persona override — when a Persona (voice + optional image) is
+      // attached to the video, every imported clip is regenerated:
+      //   1) ElevenLabs Scribe re-transcribes the clip's audio (so we have
+      //      the exact words said, even if no script was stored on the block).
+      //   2) ElevenLabs TTS reads that transcript in the persona's voice.
+      //   3) ffmpeg muxes the new audio over the original video frames.
+      // This produces a "completely new" audio track derived from analysis
+      // of the original, instead of attempting voice conversion on the
+      // existing recording. Works with any ElevenLabs voice (including
+      // ones that don't support s2s well) and gives a 100% clean voice.
       const persona = context.character;
       const personaVoiceId = persona?.voiceExternalId;
       const personaActive = !!(
@@ -112,7 +112,7 @@ export const renderBlockFunction = inngest.createFunction(
         // object and breaks the next call. We pass URLs between steps and
         // re-read bytes inside each step instead.
 
-        // 1) Extract the original audio track → stage in R2.
+        // 1) Extract the original audio → stage in R2.
         const sourceAudioUrl = await step.run("persona-extract-audio", async () => {
           const a = await extractAudioFromUrl(context.block.uploadedAssetUrl!);
           const up = await uploadObject({
@@ -123,19 +123,42 @@ export const renderBlockFunction = inngest.createFunction(
           return up.url;
         });
 
-        // 2) ElevenLabs Speech-to-Speech → stage swapped audio in R2.
-        const newAudioUrl = await step.run("persona-speech-to-speech", async () => {
-          const res = await fetch(sourceAudioUrl);
-          if (!res.ok) throw new Error(`fetch source audio: HTTP ${res.status}`);
-          const sourceBuffer = Buffer.from(await res.arrayBuffer());
+        // 2) Transcribe via Scribe. Falls back to the block's stored
+        //    script if Scribe finds nothing (e.g. silent clip).
+        const transcribedText = await step.run(
+          "persona-transcribe",
+          async (): Promise<string> => {
+            const res = await fetch(sourceAudioUrl);
+            if (!res.ok) throw new Error(`fetch source audio: HTTP ${res.status}`);
+            const sourceBuffer = Buffer.from(await res.arrayBuffer());
+            const eleven = new ElevenLabsClient({ apiKey: tokens.elevenlabs!.secret });
+            const result = await eleven.transcribe({
+              audio: sourceBuffer,
+              contentType: "audio/mpeg",
+              filename: "source.mp3",
+            });
+            const text = result.fullText.trim();
+            if (text.length > 0) return text;
+            const fallback = (context.block.script ?? "").trim();
+            if (fallback.length === 0) {
+              throw new Error(
+                "Scribe found no speech and the block has no script — nothing to TTS",
+              );
+            }
+            return fallback;
+          },
+        );
+
+        // 3) Generate new audio with the persona's voice (TTS).
+        const newAudioUrl = await step.run("persona-tts", async () => {
           const eleven = new ElevenLabsClient({ apiKey: tokens.elevenlabs!.secret });
           const settings = persona.voiceSettings ?? {};
-          const out = await eleven.speechToSpeech({
+          const { modelId, ...voiceSettings } = settings;
+          const out = await eleven.synthesize({
             voiceId: personaVoiceId!,
-            audio: sourceBuffer,
-            contentType: "audio/mpeg",
-            filename: "source.mp3",
-            settings: Object.keys(settings).length ? settings : undefined,
+            text: transcribedText,
+            modelId,
+            settings: Object.keys(voiceSettings).length ? voiceSettings : undefined,
           });
           const up = await uploadObject({
             key: `audio-swapped/${cacheKey}.mp3`,
@@ -145,7 +168,7 @@ export const renderBlockFunction = inngest.createFunction(
           return up.url;
         });
 
-        // 3) Mux + stage final video.
+        // 4) Mux + stage final video.
         const finalUrl = await step.run("persona-mux-stage", async () => {
           const audioRes = await fetch(newAudioUrl);
           if (!audioRes.ok) throw new Error(`fetch swapped audio: HTTP ${audioRes.status}`);
